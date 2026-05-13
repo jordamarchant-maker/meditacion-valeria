@@ -1,176 +1,320 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
-const COLORS = {
-  bg: "#0a0f1e",
-  border: "rgba(255,165,80,0.18)",
-  accent1: "#ff6b35",
-  accent2: "#ff9f1c",
-  accent3: "#2ec4b6",
-  text: "#f0e6d3",
-  muted: "#8b9ab0",
+// ─── Tema visual ────────────────────────────────────────────────────────────
+const C = {
+  bg: "#080b14",
+  surface: "rgba(255,255,255,0.05)",
+  surfaceHigh: "rgba(255,255,255,0.09)",
+  border: "rgba(148,105,255,0.22)",
+  accent: "#9461ff",
+  accentSoft: "rgba(148,97,255,0.18)",
+  cyan: "#22d3ee",
+  cyanSoft: "rgba(34,211,238,0.15)",
+  green: "#34d399",
+  text: "#e2e8f0",
+  muted: "#64748b",
+  highlight: "rgba(148,97,255,0.35)",
 };
 
-interface Materia {
-  id: string;
-  nivel: string;
-  nombre: string;
-  icono: string;
-  color: string;
-  temas: string[];
-}
+// ─── Plantillas de meditación ────────────────────────────────────────────────
+const PLANTILLAS = [
+  {
+    nombre: "Respiración consciente",
+    icono: "🌬️",
+    color: "#9461ff",
+    texto: `Cierra los ojos suavemente. Deja que tu cuerpo se afloje poco a poco.
 
-interface Mensaje {
-  id: string;
-  rol: "usuario" | "ia";
-  contenido: string;
-  ts: number;
-}
+Inhala profundamente por la nariz... cuenta uno, dos, tres, cuatro.
 
-type Vista = "inicio" | "chat" | "materia" | "perfil" | "horario";
+Retén el aire un momento... uno, dos.
 
-const materias: Materia[] = [
-  { id: "lenguaje1", nivel: "1M", nombre: "Lenguaje", icono: "📖", color: "#e63946", temas: ["Géneros literarios", "Textos argumentativos", "Gramática y ortografía", "Medios y comunicación"] },
-  { id: "matematica1", nivel: "1M", nombre: "Matemática", icono: "🔢", color: "#7b2d8b", temas: ["Números racionales", "Álgebra básica", "Ecuaciones lineales", "Geometría plana"] },
-  { id: "historia1", nivel: "1M", nombre: "Historia", icono: "🌍", color: "#e76f51", temas: ["Historia Universal antigua", "Civilizaciones clásicas", "Historia de Chile colonial", "Geografía física"] },
-  { id: "biologia1", nivel: "1M", nombre: "Biología", icono: "🧬", color: "#2d6a4f", temas: ["Célula y organismos", "Genética básica", "Ecosistemas", "Cuerpo humano"] },
-  { id: "fisica1", nivel: "1M", nombre: "Física", icono: "⚡", color: "#1d3557", temas: ["Movimiento y cinemática", "Fuerzas", "Energía y trabajo", "Ondas y sonido"] },
-  { id: "quimica1", nivel: "1M", nombre: "Química", icono: "🧪", color: "#457b9d", temas: ["Materia y sus propiedades", "Tabla periódica", "Enlace químico", "Reacciones básicas"] },
-  { id: "ingles1", nivel: "1M", nombre: "Inglés", icono: "🗣️", color: "#023e8a", temas: ["Present & Past tense", "Vocabulario esencial", "Reading comprehension", "Writing básico"] },
-  { id: "lenguaje2", nivel: "2M", nombre: "Lenguaje", icono: "📝", color: "#c1121f", temas: ["Literatura hispanoamericana", "Textos no literarios", "Argumentación avanzada", "PSU Lenguaje"] },
-  { id: "matematica2", nivel: "2M", nombre: "Matemática", icono: "📐", color: "#560bad", temas: ["Funciones cuadráticas", "Estadística y probabilidad", "Trigonometría", "Números complejos"] },
-  { id: "historia2", nivel: "2M", nombre: "Historia", icono: "🏛️", color: "#d62828", temas: ["Historia de Chile republicana", "Siglo XX mundial", "Derechos humanos", "Ciudadanía"] },
-  { id: "biologia2", nivel: "2M", nombre: "Biología", icono: "🔬", color: "#1b4332", temas: ["Evolución y selección natural", "Genética molecular", "Sistema nervioso", "Reproducción"] },
-  { id: "fisica2", nivel: "2M", nombre: "Física", icono: "🌊", color: "#0077b6", temas: ["Electricidad y magnetismo", "Óptica", "Termodinámica", "Física moderna"] },
+Exhala lentamente por la boca... uno, dos, tres, cuatro, cinco, seis.
+
+Siente cómo la tensión abandona tus hombros con cada exhalación.
+
+Inhala de nuevo... llenando primero el vientre, luego el pecho.
+
+Exhala... vaciando primero el pecho, luego el vientre.
+
+Estás exactamente donde necesitas estar. En este momento. Respirando.
+
+Continúa así. Con cada respiración te sumerges más en una calma profunda y serena.`,
+  },
+  {
+    nombre: "Relajación del cuerpo",
+    icono: "🌿",
+    color: "#34d399",
+    texto: `Acuéstate cómodamente. Permite que tus ojos se cierren.
+
+Lleva tu atención a los pies. Siente cómo se relajan... se aflojan... se vuelven pesados.
+
+Ahora las pantorrillas y las rodillas. Toda tensión se disuelve como nieve al sol.
+
+Los muslos, las caderas, el abdomen. Todo blando, pesado, relajado.
+
+El pecho se abre con cada respiración suave. Los hombros caen hacia abajo.
+
+Los brazos, las manos, los dedos. Completamente flojos.
+
+El cuello, la mandíbula, los ojos. La frente completamente lisa y tranquila.
+
+Tu cuerpo entero descansa en paz. Eres peso pleno sobre la tierra.
+
+Permanece aquí, en esta quietud perfecta, tanto como necesites.`,
+  },
+  {
+    nombre: "Visualización del bosque",
+    icono: "🌲",
+    color: "#22d3ee",
+    texto: `Imagina que caminas por un bosque tranquilo al amanecer.
+
+El aire es fresco y huele a tierra mojada y pino. Cada bocanada te nutre.
+
+Escuchas el suave murmullo de un arroyo cercano. El agua fluye sin prisa, como tus pensamientos.
+
+Los rayos del sol filtran entre las hojas, creando manchas doradas en el suelo.
+
+Caminas descalzo. Sientes la hierba suave bajo tus pies.
+
+Un pájaro canta a lo lejos. Todo está en perfecto equilibrio.
+
+Te sientas junto al arroyo. Observas el agua pasar.
+
+Tus preocupaciones son como hojas que caen al agua y se alejan flotando.
+
+Aquí eres libre. Aquí hay paz. Aquí eres tú.`,
+  },
+  {
+    nombre: "Gratitud y amor propio",
+    icono: "💜",
+    color: "#f472b6",
+    texto: `Coloca una mano sobre tu corazón. Siente su latido constante.
+
+Este corazón ha latido cada segundo de tu vida, sosteniéndote en silencio.
+
+Piensa en algo pequeño por lo que estar agradecida hoy.
+
+Quizás una taza de té caliente. Una llamada de alguien querido. La luz de la mañana.
+
+Permite que esa gratitud se expanda en tu pecho como una luz cálida.
+
+Ahora díte a ti misma con suavidad: estoy bien. Estoy a salvo. Merezco descanso.
+
+Tu cuerpo hace un trabajo increíble cada día. Tu mente merece pausa.
+
+Respira hondo y recibe tu propio amor. Eres suficiente exactamente como eres.
+
+Con cada respiración, renueva esa promesa de cuidarte con amabilidad.`,
+  },
+  {
+    nombre: "Noche tranquila",
+    icono: "🌙",
+    color: "#818cf8",
+    texto: `El día llega a su fin. Es hora de soltar todo lo que cargaste hoy.
+
+Respira profundamente y, al exhalar, deja ir el trabajo, las preocupaciones, las listas pendientes.
+
+No hay nada que resolver esta noche. Mañana puede esperar.
+
+Tu cuerpo sabe cómo descansar. Solo necesitas permitírselo.
+
+Siente el peso de tu cuerpo hundirse en la cama. Estás segura. Estás en calma.
+
+El silencio de la noche te envuelve como una manta suave.
+
+Cada respiración te lleva más adentro del descanso. Más adentro de la paz.
+
+Los pensamientos pasan como nubes. No los sigues. Solo observas y dejas ir.
+
+Duerme en paz. Mañana es un nuevo comienzo. Por ahora, solo descansa.`,
+  },
 ];
 
-function renderMd(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/\n/g, "<br/>");
-}
+// ─── Tipos ───────────────────────────────────────────────────────────────────
+type Tab = "texto" | "voz" | "plantillas";
+type PlayState = "idle" | "playing" | "paused";
 
-function genId(): string {
-  return Math.random().toString(36).slice(2, 10);
-}
-
-function buildSystemPrompt(materiaCtx: string | null): string {
-  const extra = materiaCtx
-    ? `\nSofía está consultando específicamente sobre: ${materiaCtx}. Centra la respuesta en ese tema.`
-    : "";
-  return `Eres el Profe IA, tutor personal de Sofía, de 18 años, que estudia en modalidad 2x1 (1° y 2° Medio simultáneos) en Chile.
-Sofía trabaja toda la semana y estudia los sábados. Sus condiciones son más exigentes que las de un estudiante regular, así que:
-- Valora su esfuerzo y constancia cuando sea oportuno
-- Prioriza explicaciones claras y directas — ella tiene poco tiempo
-- Usa ejemplos del mundo real y adulto cuando puedas
-- Organiza respuestas con pasos o listas cuando aplique
-- Máximo 3-4 párrafos o una lista corta
-- Responde siempre en español (salvo cuando enseñes inglés)
-- Usa su nombre "Sofía" ocasionalmente para personalizar
-- Si se equivoca, corrígela con respeto — es adulta
-- Cuando enseñes matemática o ciencias, muestra los pasos
-- Cubre materias de AMBOS niveles: 1° y 2° Medio del currículo chileno
-- Prepara para rendir exámenes libres MINEDUC cuando sea relevante
-${extra}
-Nunca respondas sobre temas ajenos a la educación.`;
-}
-
+// ─── Componente principal ─────────────────────────────────────────────────────
 export default function App() {
-  const [vista, setVista] = useState<Vista>("inicio");
-  const [materiaSeleccionada, setMateriaSeleccionada] = useState<Materia | null>(null);
-  const [materiaCtx, setMateriaCtx] = useState<string | null>(null);
-  const [mensajes, setMensajes] = useState<Mensaje[]>([
-    {
-      id: "welcome",
-      rol: "ia",
-      contenido: "¡Hola, **Sofía**! 🌟 Soy tu Profe IA.\n\nEstás haciendo algo increíble — estudiar 1° y 2° Medio mientras trabajas toda la semana. Los sábados son tuyos para aprender.\n\nPuedo ayudarte con todas tus materias de **ambos niveles**. ¿Por dónde empezamos hoy? 💪",
-      ts: Date.now(),
-    },
-  ]);
-  const [isTyping, setIsTyping] = useState(false);
-  const [queryCount, setQueryCount] = useState(0);
+  const [tab, setTab] = useState<Tab>("texto");
+  const [texto, setTexto] = useState(PLANTILLAS[0].texto);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [rate, setRate] = useState(0.75);
+  const [pitch, setPitch] = useState(0.9);
+  const [volume, setVolume] = useState(1.0);
+  const [playState, setPlayState] = useState<PlayState>("idle");
+  const [currentCharIndex, setCurrentCharIndex] = useState<number>(-1);
+  const [currentCharLength, setCurrentCharLength] = useState<number>(0);
+  const [voiceFilter, setVoiceFilter] = useState<"es" | "all">("es");
 
-  const irA = (v: Vista) => {
-    setVista(v);
-    if (v !== "materia") setMateriaSeleccionada(null);
+  const uttRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const synthRef = useRef<SpeechSynthesis | null>(null);
+
+  // Cargar voces
+  useEffect(() => {
+    synthRef.current = window.speechSynthesis;
+    const cargarVoces = () => {
+      const vs = synthRef.current!.getVoices();
+      if (vs.length > 0) {
+        setVoices(vs);
+        const esVoice = vs.find(v => v.lang.startsWith("es")) || vs[0];
+        setSelectedVoice(esVoice);
+      }
+    };
+    cargarVoces();
+    window.speechSynthesis.onvoiceschanged = cargarVoces;
+    return () => { synthRef.current?.cancel(); };
+  }, []);
+
+  const voicesFiltradas = voiceFilter === "es"
+    ? voices.filter(v => v.lang.startsWith("es"))
+    : voices;
+
+  const detener = useCallback(() => {
+    synthRef.current?.cancel();
+    setPlayState("idle");
+    setCurrentCharIndex(-1);
+    setCurrentCharLength(0);
+  }, []);
+
+  const reproducir = useCallback(() => {
+    if (!synthRef.current || !texto.trim()) return;
+    synthRef.current.cancel();
+
+    const utt = new SpeechSynthesisUtterance(texto);
+    if (selectedVoice) utt.voice = selectedVoice;
+    utt.rate = rate;
+    utt.pitch = pitch;
+    utt.volume = volume;
+    utt.lang = selectedVoice?.lang || "es-ES";
+
+    utt.onstart = () => setPlayState("playing");
+    utt.onend = () => { setPlayState("idle"); setCurrentCharIndex(-1); setCurrentCharLength(0); };
+    utt.onerror = () => { setPlayState("idle"); setCurrentCharIndex(-1); };
+    utt.onboundary = (e) => {
+      if (e.name === "word") {
+        setCurrentCharIndex(e.charIndex);
+        setCurrentCharLength(e.charLength ?? 0);
+      }
+    };
+
+    uttRef.current = utt;
+    synthRef.current.speak(utt);
+    setPlayState("playing");
+  }, [texto, selectedVoice, rate, pitch, volume]);
+
+  const pausarReanudar = useCallback(() => {
+    if (!synthRef.current) return;
+    if (playState === "playing") {
+      synthRef.current.pause();
+      setPlayState("paused");
+    } else if (playState === "paused") {
+      synthRef.current.resume();
+      setPlayState("playing");
+    }
+  }, [playState]);
+
+  const usarPlantilla = (t: typeof PLANTILLAS[0]) => {
+    detener();
+    setTexto(t.texto);
+    setTab("texto");
   };
-
-  const abrirMateria = (m: Materia) => {
-    setMateriaSeleccionada(m);
-    setVista("materia");
-  };
-
-  const abrirChatConMateria = (nombre: string) => {
-    setMateriaCtx(nombre);
-    setVista("chat");
-  };
-
-  const navActivo: Vista = vista === "materia" ? "inicio" : vista;
 
   return (
-    <div style={{ background: COLORS.bg, minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "'Nunito', 'Segoe UI', sans-serif", color: COLORS.text, maxWidth: 480, margin: "0 auto", position: "relative" }}>
+    <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "'Nunito', 'Segoe UI', sans-serif", color: C.text, maxWidth: 480, margin: "0 auto", position: "relative" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #0a0f1e; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,107,53,0.3); border-radius: 2px; }
-        .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,165,80,0.15); }
-        .card-hover { transition: transform 0.18s ease; }
-        .card-hover:active { transform: scale(0.97); }
-        @media (hover: hover) { .card-hover:hover { transform: scale(1.02); } }
-        .pulse-dot { animation: pulse 2s infinite; }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        .typing-dot { animation: tb 1.2s infinite; display:inline-block; }
-        .typing-dot:nth-child(2){animation-delay:.2s}
-        .typing-dot:nth-child(3){animation-delay:.4s}
-        @keyframes tb{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
-        .nav-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:10px 4px; background:transparent; border:none; cursor:pointer; position:relative; }
+        body { background: #080b14; }
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-thumb { background: rgba(148,97,255,0.4); border-radius: 2px; }
+        .glass { background: ${C.surface}; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid ${C.border}; }
+        .btn-tap:active { transform: scale(0.95); }
+        .btn-tap { transition: transform 0.12s ease; }
+        input[type=range] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; outline: none; cursor: pointer; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: ${C.accent}; cursor: pointer; }
         textarea { font-family: inherit; }
-        strong { color: ${COLORS.accent2}; }
+        @keyframes breathe { 0%,100%{transform:scale(1);opacity:0.7} 50%{transform:scale(1.12);opacity:1} }
+        @keyframes glow { 0%,100%{box-shadow:0 0 20px rgba(148,97,255,0.3)} 50%{box-shadow:0 0 40px rgba(148,97,255,0.7)} }
+        @keyframes ripple { 0%{transform:scale(0.8);opacity:1} 100%{transform:scale(2.2);opacity:0} }
+        .word-highlight { background: ${C.highlight}; border-radius: 3px; padding: 0 2px; }
       `}</style>
 
       {/* Header */}
       <header className="glass" style={{ flexShrink: 0, zIndex: 40, position: "sticky", top: 0 }}>
-        <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <button onClick={() => irA("inicio")} style={{ display: "flex", alignItems: "center", gap: 10, background: "transparent", border: "none", cursor: "pointer", color: COLORS.text }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: `linear-gradient(135deg, ${COLORS.accent1}, ${COLORS.accent2})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🎓</div>
-            <div style={{ textAlign: "left" }}>
-              <div style={{ fontWeight: 800, fontSize: 15, lineHeight: 1.1 }}>Profe IA · Sofía</div>
-              <div style={{ fontSize: 11, color: COLORS.accent2, fontWeight: 600 }}>2×1 · 1° y 2° Medio</div>
-            </div>
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 20, background: "rgba(46,196,182,0.12)", border: "1px solid rgba(46,196,182,0.25)", fontSize: 11, color: COLORS.accent3, fontWeight: 700 }}>
-            <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.accent3, display: "inline-block" }} />
-            IA activa
+        <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 14, background: `linear-gradient(135deg, ${C.accent}, ${C.cyan})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🌿</div>
+          <div>
+            <div style={{ fontWeight: 900, fontSize: 17 }}>Meditación · Voz</div>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Convierte texto en audio de meditación</div>
+          </div>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 20, background: C.cyanSoft, border: `1px solid rgba(34,211,238,0.25)`, fontSize: 11, color: C.cyan, fontWeight: 700 }}>
+            {playState === "playing" ? "▶ Reproduciendo" : playState === "paused" ? "⏸ En pausa" : "✦ Listo"}
           </div>
         </div>
       </header>
 
-      {/* Main */}
-      <main style={{ flex: 1, overflowY: "auto", padding: "16px 16px 0" }}>
-        {vista === "inicio" && <Inicio onMateria={abrirMateria} onChat={() => { setMateriaCtx(null); irA("chat"); }} queryCount={queryCount} />}
-        {vista === "chat" && <ChatIA mensajes={mensajes} setMensajes={setMensajes} isTyping={isTyping} setIsTyping={setIsTyping} setQueryCount={setQueryCount} materiaCtx={materiaCtx} onVolver={() => irA("inicio")} />}
-        {vista === "materia" && materiaSeleccionada && <MateriaDetalle materia={materiaSeleccionada} onVolver={() => irA("inicio")} onChat={abrirChatConMateria} />}
-        {vista === "perfil" && <Perfil queryCount={queryCount} onVolver={() => irA("inicio")} />}
-        {vista === "horario" && <Horario onVolver={() => irA("inicio")} />}
+      {/* Contenido principal */}
+      <main style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+        {tab === "texto" && (
+          <VistaTexto
+            texto={texto}
+            setTexto={setTexto}
+            playState={playState}
+            currentCharIndex={currentCharIndex}
+            currentCharLength={currentCharLength}
+            rate={rate}
+            setRate={setRate}
+            pitch={pitch}
+            setPitch={setPitch}
+            volume={volume}
+            setVolume={setVolume}
+            selectedVoice={selectedVoice}
+            onPlay={reproducir}
+            onPauseResume={pausarReanudar}
+            onStop={detener}
+          />
+        )}
+        {tab === "voz" && (
+          <VistaVoz
+            voices={voicesFiltradas}
+            allVoices={voices}
+            selectedVoice={selectedVoice}
+            setSelectedVoice={setSelectedVoice}
+            voiceFilter={voiceFilter}
+            setVoiceFilter={setVoiceFilter}
+          />
+        )}
+        {tab === "plantillas" && (
+          <VistaPlantillas onUsar={usarPlantilla} />
+        )}
       </main>
+
+      {/* Control de reproducción fijo */}
+      <PlayerBar
+        playState={playState}
+        onPlay={reproducir}
+        onPauseResume={pausarReanudar}
+        onStop={detener}
+        selectedVoice={selectedVoice}
+        rate={rate}
+      />
 
       {/* Bottom Nav */}
       <nav className="glass" style={{ flexShrink: 0, zIndex: 40, position: "sticky", bottom: 0 }}>
         <div style={{ display: "flex" }}>
           {([
-            { id: "inicio", icon: "🏠", label: "Inicio" },
-            { id: "chat", icon: "🤖", label: "Profe IA" },
-            { id: "horario", icon: "📅", label: "Horario" },
-            { id: "perfil", icon: "👤", label: "Mi Perfil" },
-          ] as { id: Vista; icon: string; label: string }[]).map((item) => {
-            const active = navActivo === item.id;
+            { id: "texto" as Tab, icon: "📝", label: "Texto" },
+            { id: "voz" as Tab, icon: "🎙", label: "Voz" },
+            { id: "plantillas" as Tab, icon: "🌸", label: "Plantillas" },
+          ]).map((item) => {
+            const active = tab === item.id;
             return (
-              <button key={item.id} className="nav-btn" onClick={() => irA(item.id)}>
-                {active && <span style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 32, height: 3, borderRadius: 2, background: `linear-gradient(90deg, ${COLORS.accent1}, ${COLORS.accent2})` }} />}
+              <button key={item.id} onClick={() => setTab(item.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "10px 4px", background: "transparent", border: "none", cursor: "pointer", position: "relative" }}>
+                {active && <span style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 32, height: 3, borderRadius: 2, background: `linear-gradient(90deg, ${C.accent}, ${C.cyan})` }} />}
                 <span style={{ fontSize: 20, lineHeight: 1 }}>{item.icon}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: active ? COLORS.accent2 : COLORS.muted }}>{item.label}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: active ? C.cyan : C.muted }}>{item.label}</span>
               </button>
             );
           })}
@@ -180,259 +324,280 @@ export default function App() {
   );
 }
 
-function Inicio({ onMateria, onChat, queryCount }: { onMateria: (m: Materia) => void; onChat: () => void; queryCount: number }) {
-  const nivel1 = materias.filter(m => m.nivel === "1M");
-  const nivel2 = materias.filter(m => m.nivel === "2M");
+// ─── Vista Texto ─────────────────────────────────────────────────────────────
+function VistaTexto({ texto, setTexto, playState, currentCharIndex, currentCharLength, rate, setRate, pitch, setPitch, volume, setVolume, selectedVoice, onPlay, onPauseResume, onStop }: {
+  texto: string; setTexto: (t: string) => void;
+  playState: PlayState; currentCharIndex: number; currentCharLength: number;
+  rate: number; setRate: (v: number) => void;
+  pitch: number; setPitch: (v: number) => void;
+  volume: number; setVolume: (v: number) => void;
+  selectedVoice: SpeechSynthesisVoice | null;
+  onPlay: () => void; onPauseResume: () => void; onStop: () => void;
+}) {
+  const isPlaying = playState === "playing" || playState === "paused";
+
+  // Construir texto con palabra resaltada
+  const textoResaltado = () => {
+    if (currentCharIndex < 0 || currentCharLength === 0) return <span style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.85, color: C.text }}>{texto}</span>;
+    const antes = texto.slice(0, currentCharIndex);
+    const palabra = texto.slice(currentCharIndex, currentCharIndex + currentCharLength);
+    const despues = texto.slice(currentCharIndex + currentCharLength);
+    return (
+      <span style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.85, color: C.text }}>
+        {antes}<mark className="word-highlight">{palabra}</mark>{despues}
+      </span>
+    );
+  };
+
   return (
-    <div style={{ paddingBottom: 24, display: "flex", flexDirection: "column", gap: 20 }}>
-      <div className="glass" style={{ borderRadius: 20, padding: "24px 20px", background: `linear-gradient(135deg, rgba(255,107,53,0.18) 0%, rgba(255,159,28,0.12) 50%, rgba(46,196,182,0.10) 100%)`, position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.accent1}40 0%, transparent 70%)` }} />
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <div style={{ fontSize: 26, marginBottom: 6 }}>¡Hola, Sofía! 👋</div>
-          <h1 style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.2, marginBottom: 8 }}>Sábado de estudios</h1>
-          <p style={{ fontSize: 13, color: COLORS.muted, lineHeight: 1.5 }}>Trabajas toda la semana y igual sacas tiempo. Eso es constancia real. ¿Empezamos?</p>
-          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-            {[{ n: "2×1", l: "Modalidad" }, { n: "12", l: "Materias" }, { n: "24/7", l: "Profe IA" }, { n: queryCount.toString(), l: "Consultas" }].map(s => (
-              <div key={s.l} className="glass" style={{ borderRadius: 10, padding: "6px 12px", textAlign: "center", flex: "1 1 60px" }}>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 14, color: COLORS.accent2 }}>{s.n}</div>
-                <div style={{ fontSize: 10, color: COLORS.muted }}>{s.l}</div>
-              </div>
-            ))}
+    <div style={{ padding: "16px 16px 0", display: "flex", flexDirection: "column", gap: 14, paddingBottom: 140 }}>
+
+      {/* Animación de reproducción */}
+      {playState === "playing" && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "20px 0 8px", gap: 0 }}>
+          <div style={{ position: "relative", width: 72, height: 72, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: `2px solid ${C.accent}`, animation: "ripple 2s ease-out infinite" }} />
+            <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: `2px solid ${C.cyan}`, animation: "ripple 2s ease-out infinite 0.7s" }} />
+            <div style={{ width: 52, height: 52, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, ${C.cyan})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, animation: "breathe 4s ease-in-out infinite" }}>🌿</div>
           </div>
         </div>
-      </div>
-      <button className="card-hover" onClick={onChat} style={{ width: "100%", borderRadius: 18, padding: "18px 20px", background: `linear-gradient(135deg, ${COLORS.accent1} 0%, ${COLORS.accent2} 100%)`, border: "none", cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", gap: 14, boxShadow: `0 8px 28px ${COLORS.accent1}50` }}>
-        <div style={{ width: 52, height: 52, background: "rgba(255,255,255,0.2)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0 }}>🤖</div>
-        <div style={{ textAlign: "left", flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 16 }}>Pregúntale al Profe IA</div>
-          <div style={{ fontSize: 12, opacity: 0.85 }}>Respuestas reales • 1° y 2° Medio</div>
+      )}
+
+      {/* Área de texto */}
+      <div className="glass" style={{ borderRadius: 18, overflow: "hidden" }}>
+        <div style={{ padding: "10px 14px 8px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>TEXTO DE MEDITACIÓN</span>
+          <span style={{ fontSize: 11, color: C.muted }}>{texto.split(/\s+/).filter(Boolean).length} palabras</span>
         </div>
-        <span style={{ fontSize: 20 }}>→</span>
-      </button>
-      <MateriaGrid nivel="1° Medio" items={nivel1} onSeleccionar={onMateria} />
-      <MateriaGrid nivel="2° Medio" items={nivel2} onSeleccionar={onMateria} />
-      <div className="glass" style={{ borderRadius: 16, padding: "16px 18px" }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6, display: "flex", gap: 6 }}>⚡ Tip para trabajadoras que estudian</div>
-        <p style={{ fontSize: 13, color: COLORS.muted, lineHeight: 1.6 }}><strong>Estudia en bloques de 25 min</strong> con 5 de descanso (Pomodoro). Los sábados rinden más cuando divides el día en bloques de materia, no en horas seguidas.</p>
+        {isPlaying ? (
+          <div style={{ padding: "14px 16px", minHeight: 200, maxHeight: 320, overflowY: "auto" }}>
+            {textoResaltado()}
+          </div>
+        ) : (
+          <textarea
+            value={texto}
+            onChange={e => setTexto(e.target.value)}
+            placeholder="Escribe o pega tu texto de meditación aquí..."
+            style={{ width: "100%", minHeight: 200, maxHeight: 320, background: "transparent", border: "none", outline: "none", padding: "14px 16px", color: C.text, fontSize: 15, lineHeight: 1.85, resize: "none" }}
+          />
+        )}
+      </div>
+
+      {/* Voz seleccionada (mini) */}
+      <div className="glass" style={{ borderRadius: 14, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 20 }}>🎙</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {selectedVoice?.name || "Sin voz cargada"}
+          </div>
+          <div style={{ fontSize: 11, color: C.muted }}>{selectedVoice?.lang || "—"}</div>
+        </div>
+        <div style={{ fontSize: 11, color: C.cyan, background: C.cyanSoft, padding: "3px 8px", borderRadius: 8, fontWeight: 700, whiteSpace: "nowrap" }}>
+          {(rate * 100).toFixed(0)}% vel
+        </div>
+      </div>
+
+      {/* Controles de ajuste */}
+      <div className="glass" style={{ borderRadius: 16, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ fontWeight: 800, fontSize: 13, color: C.muted }}>AJUSTES DE VOZ</div>
+
+        <SliderControl label="Velocidad" icon="⏩" value={rate} min={0.4} max={1.2} step={0.05}
+          onChange={setRate} color={C.accent}
+          display={rate <= 0.65 ? "Muy lenta" : rate <= 0.85 ? "Lenta (meditación)" : rate <= 1.0 ? "Normal" : "Rápida"}
+          gradient={`linear-gradient(90deg, #9461ff, #22d3ee)`} />
+
+        <SliderControl label="Tono" icon="🎵" value={pitch} min={0.5} max={1.5} step={0.05}
+          onChange={setPitch} color={C.green}
+          display={pitch <= 0.75 ? "Muy grave" : pitch <= 0.95 ? "Grave (sereno)" : pitch <= 1.05 ? "Normal" : "Agudo"}
+          gradient={`linear-gradient(90deg, #34d399, #22d3ee)`} />
+
+        <SliderControl label="Volumen" icon="🔊" value={volume} min={0.1} max={1.0} step={0.05}
+          onChange={setVolume} color="#f472b6"
+          display={volume <= 0.3 ? "Bajo" : volume <= 0.7 ? "Medio" : "Alto"}
+          gradient={`linear-gradient(90deg, #f472b6, #818cf8)`} />
       </div>
     </div>
   );
 }
 
-function MateriaGrid({ nivel, items, onSeleccionar }: { nivel: string; items: Materia[]; onSeleccionar: (m: Materia) => void }) {
+// ─── Control deslizante ───────────────────────────────────────────────────────
+function SliderControl({ label, icon, value, min, max, step, onChange, display, gradient }: {
+  label: string; icon: string; value: number; min: number; max: number; step: number;
+  onChange: (v: number) => void; color: string; display: string; gradient: string;
+}) {
+  const pct = ((value - min) / (max - min)) * 100;
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, fontWeight: 700, color: COLORS.accent1, background: "rgba(255,107,53,0.12)", padding: "3px 8px", borderRadius: 6, border: `1px solid ${COLORS.accent1}30` }}>{nivel}</span>
-        <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, display: "flex", gap: 6, alignItems: "center" }}>
+          <span>{icon}</span> {label}
+        </span>
+        <span style={{ fontSize: 12, color: C.cyan, fontWeight: 700, background: C.cyanSoft, padding: "2px 8px", borderRadius: 6 }}>{display}</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-        {items.map(m => (
-          <button key={m.id} className="card-hover" onClick={() => onSeleccionar(m)} style={{ background: `linear-gradient(145deg, ${m.color}cc, ${m.color}88)`, border: `1px solid ${m.color}50`, borderRadius: 16, padding: "14px 10px", cursor: "pointer", color: "#fff", textAlign: "left" }}>
-            <div style={{ fontSize: 26, marginBottom: 6 }}>{m.icono}</div>
-            <div style={{ fontWeight: 800, fontSize: 12, lineHeight: 1.3 }}>{m.nombre}</div>
+      <input type="range" min={min} max={max} step={step} value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        style={{ width: "100%", background: `linear-gradient(90deg, ${gradient.slice(gradient.indexOf("#"))}, transparent ${pct}%, rgba(255,255,255,0.1) ${pct}%)` }} />
+    </div>
+  );
+}
+
+// ─── Barra de reproducción ────────────────────────────────────────────────────
+function PlayerBar({ playState, onPlay, onPauseResume, onStop, selectedVoice, rate }: {
+  playState: PlayState; onPlay: () => void; onPauseResume: () => void; onStop: () => void;
+  selectedVoice: SpeechSynthesisVoice | null; rate: number;
+}) {
+  const isActive = playState !== "idle";
+  return (
+    <div style={{ position: "sticky", bottom: 56, zIndex: 30, padding: "0 16px 10px" }}>
+      <div className="glass" style={{ borderRadius: 20, padding: "14px 18px", background: isActive ? `linear-gradient(135deg, rgba(148,97,255,0.2), rgba(34,211,238,0.12))` : C.surface, border: `1px solid ${isActive ? "rgba(148,97,255,0.4)" : C.border}`, display: "flex", alignItems: "center", gap: 14, boxShadow: isActive ? "0 8px 32px rgba(148,97,255,0.25)" : "none" }}>
+
+        {/* Botón principal */}
+        {!isActive ? (
+          <button className="btn-tap" onClick={onPlay} style={{ width: 54, height: 54, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, ${C.cyan})`, border: "none", cursor: "pointer", fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 4px 20px rgba(148,97,255,0.5)` }}>
+            ▶
+          </button>
+        ) : (
+          <button className="btn-tap" onClick={onPauseResume} style={{ width: 54, height: 54, borderRadius: "50%", background: playState === "playing" ? `linear-gradient(135deg, ${C.accent}, ${C.cyan})` : "rgba(255,255,255,0.15)", border: "none", cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 4px 20px rgba(148,97,255,0.4)` }}>
+            {playState === "playing" ? "⏸" : "▶"}
+          </button>
+        )}
+
+        {/* Info */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {isActive ? (playState === "playing" ? "🎵 Reproduciendo..." : "⏸ En pausa") : "Listo para reproducir"}
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {selectedVoice?.name || "Sin voz"} · {(rate * 100).toFixed(0)}% velocidad
+          </div>
+        </div>
+
+        {/* Detener */}
+        {isActive && (
+          <button className="btn-tap" onClick={onStop} style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(255,255,255,0.08)", border: `1px solid ${C.border}`, cursor: "pointer", fontSize: 16, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            ■
+          </button>
+        )}
+
+        {/* Indicador de onda */}
+        {playState === "playing" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+            {[4, 10, 7, 14, 5, 11, 8].map((h, i) => (
+              <div key={i} style={{ width: 3, height: h, borderRadius: 2, background: C.accent, animation: `breathe ${0.6 + i * 0.1}s ease-in-out infinite alternate` }} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Vista Voz ────────────────────────────────────────────────────────────────
+function VistaVoz({ voices, allVoices, selectedVoice, setSelectedVoice, voiceFilter, setVoiceFilter }: {
+  voices: SpeechSynthesisVoice[]; allVoices: SpeechSynthesisVoice[];
+  selectedVoice: SpeechSynthesisVoice | null;
+  setSelectedVoice: (v: SpeechSynthesisVoice) => void;
+  voiceFilter: "es" | "all"; setVoiceFilter: (f: "es" | "all") => void;
+}) {
+  const esCount = allVoices.filter(v => v.lang.startsWith("es")).length;
+  return (
+    <div style={{ padding: "16px 16px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div className="glass" style={{ borderRadius: 16, padding: "14px 16px" }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>🎙 Selecciona una voz</div>
+        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
+          Las voces disponibles dependen de tu dispositivo Android. Para meditación recomendamos voces femeninas en español.
+        </div>
+      </div>
+
+      {/* Filtro */}
+      <div style={{ display: "flex", gap: 8 }}>
+        {(["es", "all"] as const).map(f => (
+          <button key={f} onClick={() => setVoiceFilter(f)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, background: voiceFilter === f ? C.accentSoft : C.surface, border: `1px solid ${voiceFilter === f ? C.accent : C.border}`, color: voiceFilter === f ? C.accent : C.muted, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+            {f === "es" ? `🇪🇸 Español (${esCount})` : `🌍 Todas (${allVoices.length})`}
           </button>
         ))}
       </div>
-    </div>
-  );
-}
 
-function MateriaDetalle({ materia, onVolver, onChat }: { materia: Materia; onVolver: () => void; onChat: (nombre: string) => void }) {
-  return (
-    <div style={{ paddingBottom: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-      <button onClick={onVolver} style={{ background: "transparent", border: "none", color: COLORS.accent2, cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 4, padding: 0 }}>← Volver</button>
-      <div style={{ borderRadius: 20, padding: "22px 18px", background: `linear-gradient(135deg, ${materia.color}cc, ${materia.color}55)`, border: `1px solid ${materia.color}50` }}>
-        <div style={{ fontSize: 40, marginBottom: 8 }}>{materia.icono}</div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.7)", fontFamily: "'Space Mono', monospace", marginBottom: 4 }}>{materia.nivel === "1M" ? "1° Medio" : "2° Medio"}</div>
-        <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: 4 }}>{materia.nombre}</h2>
-      </div>
-      <div className="glass" style={{ borderRadius: 16, padding: "16px 18px" }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12, display: "flex", gap: 6 }}>📋 Temas del programa</div>
+      {voices.length === 0 ? (
+        <div className="glass" style={{ borderRadius: 16, padding: "24px", textAlign: "center" }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>😔</div>
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>Sin voces disponibles</div>
+          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+            Tu navegador no ha cargado voces aún. Intenta abrir Ajustes → Accesibilidad → Texto a voz en tu teléfono y descarga voces en español.
+          </div>
+        </div>
+      ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {materia.temas.map((t, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10, background: "rgba(255,255,255,0.04)", fontSize: 13 }}>
-              <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, color: COLORS.accent1, fontWeight: 700, width: 20, flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
-              {t}
-            </div>
-          ))}
-        </div>
-      </div>
-      <button className="card-hover" onClick={() => onChat(materia.nombre)} style={{ width: "100%", borderRadius: 16, padding: "16px", background: `linear-gradient(135deg, ${COLORS.accent1}, ${COLORS.accent2})`, border: "none", cursor: "pointer", color: "#fff", fontWeight: 800, fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-        <span>🤖</span> Preguntarle al Profe IA sobre {materia.nombre}
-      </button>
-    </div>
-  );
-}
-
-function ChatIA({ mensajes, setMensajes, isTyping, setIsTyping, setQueryCount, materiaCtx, onVolver }: {
-  mensajes: Mensaje[]; setMensajes: React.Dispatch<React.SetStateAction<Mensaje[]>>;
-  isTyping: boolean; setIsTyping: (v: boolean) => void;
-  setQueryCount: React.Dispatch<React.SetStateAction<number>>;
-  materiaCtx: string | null; onVolver: () => void;
-}) {
-  const [input, setInput] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [mensajes, isTyping]);
-
-  const enviar = async (texto?: string) => {
-    const msg = (texto ?? input).trim();
-    if (!msg || isTyping) return;
-    setInput("");
-    const userMsg: Mensaje = { id: genId(), rol: "usuario", contenido: msg, ts: Date.now() };
-    setMensajes(prev => [...prev, userMsg]);
-    setQueryCount(c => c + 1);
-    setIsTyping(true);
-    try {
-      const historial = mensajes.filter(m => m.id !== "welcome").slice(-10).map(m => ({ role: m.rol === "usuario" ? "user" : "assistant", content: m.contenido }));
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: buildSystemPrompt(materiaCtx), messages: [...historial, { role: "user", content: msg }] })
-      });
-      const data = await response.json();
-      const reply = data?.content?.[0]?.text || "No pude obtener respuesta. Intenta de nuevo.";
-      setMensajes(prev => [...prev, { id: genId(), rol: "ia", contenido: reply, ts: Date.now() }]);
-    } catch {
-      setMensajes(prev => [...prev, { id: genId(), rol: "ia", contenido: "Hubo un error de conexión. Revisa tu red e intenta de nuevo.", ts: Date.now() }]);
-    } finally {
-      setIsTyping(false);
-    }
-  };
-
-  const sugerencias = ["Explícame la célula eucariota", "¿Cómo resuelvo ecuaciones cuadráticas?", "Cuéntame sobre la Independencia de Chile", "Practica inglés conmigo"];
-
-  return (
-    <div style={{ height: "calc(100vh - 130px)", display: "flex", flexDirection: "column", gap: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 12, flexShrink: 0 }}>
-        <button onClick={onVolver} style={{ background: "transparent", border: "none", color: COLORS.accent2, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>←</button>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 15 }}>Profe IA</div>
-          {materiaCtx && <div style={{ fontSize: 11, color: COLORS.accent2 }}>Contexto: {materiaCtx}</div>}
-        </div>
-        <button onClick={() => setMensajes([{ id: "welcome", rol: "ia", contenido: "¡Hola de nuevo, **Sofía**! 🌟 Chat reiniciado. ¿Qué materia vemos ahora?", ts: Date.now() }])} style={{ background: "rgba(255,255,255,0.06)", border: `1px solid ${COLORS.border}`, borderRadius: 8, color: COLORS.muted, cursor: "pointer", padding: "4px 10px", fontSize: 11, fontWeight: 700 }}>Limpiar</button>
-      </div>
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, paddingRight: 4 }}>
-        {mensajes.map(m => (
-          <div key={m.id} style={{ display: "flex", justifyContent: m.rol === "usuario" ? "flex-end" : "flex-start" }}>
-            {m.rol === "ia" && <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${COLORS.accent1}, ${COLORS.accent2})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, marginRight: 8, marginTop: 4 }}>🤖</div>}
-            <div style={{ maxWidth: "78%", padding: "11px 14px", borderRadius: m.rol === "usuario" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: m.rol === "usuario" ? `linear-gradient(135deg, ${COLORS.accent1}, ${COLORS.accent2})` : "rgba(255,255,255,0.07)", border: m.rol === "ia" ? `1px solid ${COLORS.border}` : "none", fontSize: 13.5, lineHeight: 1.55, color: m.rol === "usuario" ? "#fff" : COLORS.text }} dangerouslySetInnerHTML={{ __html: renderMd(m.contenido) }} />
-          </div>
-        ))}
-        {isTyping && (
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${COLORS.accent1}, ${COLORS.accent2})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>🤖</div>
-            <div style={{ padding: "11px 16px", borderRadius: "16px 16px 16px 4px", background: "rgba(255,255,255,0.07)", border: `1px solid ${COLORS.border}`, display: "flex", gap: 4, alignItems: "center" }}>
-              <span className="typing-dot" style={{ fontSize: 18, color: COLORS.accent2 }}>·</span>
-              <span className="typing-dot" style={{ fontSize: 18, color: COLORS.accent2 }}>·</span>
-              <span className="typing-dot" style={{ fontSize: 18, color: COLORS.accent2 }}>·</span>
-            </div>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-      {mensajes.length <= 1 && !isTyping && (
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, flexShrink: 0 }}>
-          {sugerencias.map(s => (
-            <button key={s} onClick={() => enviar(s)} style={{ background: "rgba(255,255,255,0.06)", border: `1px solid ${COLORS.border}`, borderRadius: 20, padding: "7px 12px", fontSize: 12, color: COLORS.text, cursor: "pointer", whiteSpace: "nowrap", fontWeight: 600, flexShrink: 0 }}>{s}</button>
-          ))}
+          {voices.map((v, i) => {
+            const selected = selectedVoice?.name === v.name;
+            const esFemenina = /female|femenin|mujer|woman|girl|she/i.test(v.name) || /Google español de Estados Unidos|Monica|Paulina|Luciana|Mónica/i.test(v.name);
+            return (
+              <button key={i} className="btn-tap" onClick={() => setSelectedVoice(v)} style={{ textAlign: "left", padding: "12px 14px", borderRadius: 14, background: selected ? C.accentSoft : C.surface, border: `1px solid ${selected ? C.accent : C.border}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, color: C.text }}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: selected ? `linear-gradient(135deg, ${C.accent}, ${C.cyan})` : "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+                  {esFemenina ? "👩" : "🎙"}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? C.accent : C.text }}>
+                    {v.name}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
+                    <span>{v.lang}</span>
+                    {v.localService && <span style={{ color: C.green, background: "rgba(52,211,153,0.12)", padding: "1px 6px", borderRadius: 4 }}>Local</span>}
+                    {!v.localService && <span style={{ color: C.muted, background: "rgba(255,255,255,0.06)", padding: "1px 6px", borderRadius: 4 }}>Online</span>}
+                  </div>
+                </div>
+                {selected && <span style={{ color: C.cyan, fontSize: 18 }}>✓</span>}
+              </button>
+            );
+          })}
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", paddingTop: 10, flexShrink: 0 }}>
-        <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }} placeholder="Pregunta lo que necesites..." rows={1} style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "10px 14px", color: COLORS.text, fontSize: 13, resize: "none", outline: "none", lineHeight: 1.5, maxHeight: 100, overflowY: "auto" }} />
-        <button onClick={() => enviar()} disabled={!input.trim() || isTyping} style={{ width: 44, height: 44, borderRadius: 12, background: !input.trim() || isTyping ? "rgba(255,255,255,0.1)" : `linear-gradient(135deg, ${COLORS.accent1}, ${COLORS.accent2})`, border: "none", cursor: !input.trim() || isTyping ? "not-allowed" : "pointer", fontSize: 18, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.2s", color: "#fff" }}>
-          {isTyping ? "⏳" : "↑"}
-        </button>
+
+      <div className="glass" style={{ borderRadius: 14, padding: "12px 14px", borderColor: "rgba(34,211,238,0.25)" }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: C.cyan, marginBottom: 4 }}>💡 Tip para meditación</div>
+        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>Ajusta la velocidad a 70–80% y el tono a 0.85–0.95 para un sonido más suave y relajante. Las voces locales funcionan sin internet.</p>
       </div>
     </div>
   );
 }
 
-function Horario({ onVolver }: { onVolver: () => void }) {
-  const bloques = [
-    { hora: "09:00", dur: "9:00 – 10:30", materia: "1° Medio — Lenguaje / Historia", color: "#e63946" },
-    { hora: "10:30", dur: "10:30 – 10:45", materia: "☕ Descanso", color: "#555" },
-    { hora: "10:45", dur: "10:45 – 12:15", materia: "1° Medio — Matemática / Física", color: "#7b2d8b" },
-    { hora: "12:15", dur: "12:15 – 13:00", materia: "🍽 Almuerzo", color: "#555" },
-    { hora: "13:00", dur: "13:00 – 14:30", materia: "2° Medio — Lenguaje / Historia", color: "#c1121f" },
-    { hora: "14:30", dur: "14:30 – 14:45", materia: "☕ Descanso", color: "#555" },
-    { hora: "14:45", dur: "14:45 – 16:15", materia: "2° Medio — Matemática / Biología", color: "#560bad" },
-    { hora: "16:15", dur: "16:15 – 17:00", materia: "🔁 Repaso libre · Profe IA", color: "#2ec4b6" },
-  ];
+// ─── Vista Plantillas ─────────────────────────────────────────────────────────
+function VistaPlantillas({ onUsar }: { onUsar: (t: typeof PLANTILLAS[0]) => void }) {
+  const [expandida, setExpandida] = useState<number | null>(null);
   return (
-    <div style={{ paddingBottom: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-      <button onClick={onVolver} style={{ background: "transparent", border: "none", color: COLORS.accent2, cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 4, padding: 0 }}>← Volver</button>
-      <div>
-        <h2 style={{ fontSize: 20, fontWeight: 900, marginBottom: 4 }}>📅 Horario sugerido de sábado</h2>
-        <p style={{ fontSize: 13, color: COLORS.muted }}>Adaptado a modalidad 2×1 para exámenes libres MINEDUC</p>
+    <div style={{ padding: "16px 16px 120px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="glass" style={{ borderRadius: 16, padding: "14px 16px" }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>🌸 Textos de meditación</div>
+        <div style={{ fontSize: 13, color: C.muted }}>Selecciona una plantilla o personaliza el texto en la pestaña Texto.</div>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {bloques.map((b, i) => (
-          <div key={i} className="glass" style={{ borderRadius: 14, padding: "12px 16px", display: "flex", gap: 14, alignItems: "center", borderLeft: `4px solid ${b.color}` }}>
-            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, fontWeight: 700, color: b.color, width: 36, flexShrink: 0, textAlign: "center" }}>{b.hora}</div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13 }}>{b.materia}</div>
-              <div style={{ fontSize: 11, color: COLORS.muted }}>{b.dur}</div>
+
+      {PLANTILLAS.map((p, i) => (
+        <div key={i} className="glass" style={{ borderRadius: 18, overflow: "hidden", border: `1px solid ${expandida === i ? p.color + "55" : C.border}` }}>
+          <button onClick={() => setExpandida(expandida === i ? null : i)} style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, color: C.text }}>
+            <div style={{ width: 46, height: 46, borderRadius: 13, background: `${p.color}22`, border: `1px solid ${p.color}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>
+              {p.icono}
             </div>
-          </div>
-        ))}
-      </div>
-      <div className="glass" style={{ borderRadius: 14, padding: "14px 16px", borderColor: "rgba(46,196,182,0.3)" }}>
-        <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 6, color: COLORS.accent3 }}>💡 Tip exámenes libres MINEDUC</div>
-        <p style={{ fontSize: 12, color: COLORS.muted, lineHeight: 1.6 }}>Rinde primero 1° Medio, luego 2°. Puedes inscribirte desde marzo en cualquier sostenedor municipal. Consulta en el DAEM de tu comuna.</p>
-      </div>
-    </div>
-  );
-}
+            <div style={{ flex: 1, textAlign: "left" }}>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>{p.nombre}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{p.texto.split(/\s+/).length} palabras · ~{Math.ceil(p.texto.split(/\s+/).length / 100)} min</div>
+            </div>
+            <span style={{ color: C.muted, fontSize: 16, transition: "transform 0.2s", transform: expandida === i ? "rotate(180deg)" : "none" }}>▾</span>
+          </button>
 
-function Perfil({ queryCount, onVolver }: { queryCount: number; onVolver: () => void }) {
-  const logros = [
-    { icono: "🌟", nombre: "Primera pregunta", desc: "Le preguntaste al Profe IA por primera vez", done: queryCount >= 1 },
-    { icono: "💪", nombre: "Constante", desc: "5 consultas al Profe IA", done: queryCount >= 5 },
-    { icono: "🔥", nombre: "En racha", desc: "20 preguntas al Profe IA", done: queryCount >= 20 },
-    { icono: "🏆", nombre: "Maestra 2×1", desc: "50 consultas al Profe IA", done: queryCount >= 50 },
-  ];
-  return (
-    <div style={{ paddingBottom: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-      <button onClick={onVolver} style={{ background: "transparent", border: "none", color: COLORS.accent2, cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", gap: 4, alignItems: "center", padding: 0 }}>← Volver</button>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 8 }}>
-        <div style={{ width: 88, height: 88, borderRadius: "50%", background: `linear-gradient(135deg, ${COLORS.accent1}, ${COLORS.accent2})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 12 }}>👩‍💼</div>
-        <h2 style={{ fontWeight: 900, fontSize: 22 }}>Sofía</h2>
-        <span style={{ fontSize: 12, color: COLORS.accent2, background: "rgba(255,107,53,0.12)", border: `1px solid ${COLORS.accent1}30`, padding: "4px 12px", borderRadius: 20, marginTop: 6, fontWeight: 700 }}>2×1 · Sábados · Chile 🇨🇱</span>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-        {[{ icono: "🤖", num: queryCount, label: "Consultas" }, { icono: "📚", num: 12, label: "Materias" }, { icono: "🏅", num: logros.filter(l => l.done).length, label: "Logros" }].map((s, i) => (
-          <div key={i} className="glass" style={{ borderRadius: 14, padding: "14px 10px", textAlign: "center" }}>
-            <div style={{ fontSize: 22, marginBottom: 4 }}>{s.icono}</div>
-            <div style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 18, color: COLORS.accent2 }}>{s.num}</div>
-            <div style={{ fontSize: 11, color: COLORS.muted }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-      <div className="glass" style={{ borderRadius: 16, padding: "16px 18px" }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12, display: "flex", gap: 6 }}>🏆 Mis Logros</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {logros.map((l, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 12, background: l.done ? "rgba(255,159,28,0.1)" : "rgba(255,255,255,0.03)", opacity: l.done ? 1 : 0.5, border: l.done ? `1px solid ${COLORS.accent2}30` : "1px solid transparent" }}>
-              <span style={{ fontSize: 22 }}>{l.icono}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: l.done ? COLORS.text : COLORS.muted }}>{l.nombre}</div>
-                <div style={{ fontSize: 11, color: COLORS.muted }}>{l.desc}</div>
+          {expandida === i && (
+            <div style={{ borderTop: `1px solid ${C.border}` }}>
+              <div style={{ padding: "12px 16px 8px", maxHeight: 200, overflowY: "auto" }}>
+                <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{p.texto}</p>
               </div>
-              {l.done ? <span style={{ color: COLORS.accent3, fontWeight: 700 }}>✓</span> : <span style={{ fontSize: 14 }}>🔒</span>}
+              <div style={{ padding: "10px 16px 14px" }}>
+                <button className="btn-tap" onClick={() => onUsar(p)} style={{ width: "100%", padding: "11px", borderRadius: 12, background: `linear-gradient(135deg, ${p.color}cc, ${p.color}88)`, border: "none", cursor: "pointer", color: "#fff", fontWeight: 800, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  {p.icono} Usar esta plantilla
+                </button>
+              </div>
             </div>
-          ))}
+          )}
         </div>
-      </div>
-      <div className="glass" style={{ borderRadius: 16, padding: "16px 18px" }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8, display: "flex", gap: 6 }}>🤖 Sobre Profe IA</div>
-        <p style={{ fontSize: 13, color: COLORS.muted, lineHeight: 1.6 }}>Tutor personal impulsado por <strong style={{ color: COLORS.accent2 }}>Claude (Anthropic)</strong>, diseñado para estudiantes 2×1 que trabajan. Disponible 24/7, cubre 1° y 2° Medio del currículo chileno. <strong style={{ color: COLORS.accent2 }}>Hecho para Sofía 🧡</strong></p>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 11, color: COLORS.muted }}>
-          <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.accent3, display: "inline-block" }} />
-          Profe IA v1.0 · Sofía Edition
-        </div>
-      </div>
+      ))}
     </div>
   );
 }

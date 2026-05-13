@@ -52,5 +52,5 @@ if (existsSync(distPath)) {
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Profe IA · Sofía → http://localhost:${PORT}`)
+  console.log(`✅ Meditación · Voz → http://localhost:${PORT}`)
 })
