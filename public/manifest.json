@@ -1,6 +1,6 @@
 {
-  "name": "Meditación · Voz",
-  "short_name": "Meditación",
+  "name": "Meditación ValerIA",
+  "short_name": "ValerIA",
   "description": "Convierte textos de meditación en audio con distintas voces",
   "start_url": "/",
   "display": "standalone",

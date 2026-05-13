@@ -1,22 +1,44 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-// ─── Tema visual ────────────────────────────────────────────────────────────
+// ─── Tema ────────────────────────────────────────────────────────────────────
 const C = {
   bg: "#080b14",
   surface: "rgba(255,255,255,0.05)",
-  surfaceHigh: "rgba(255,255,255,0.09)",
   border: "rgba(148,105,255,0.22)",
   accent: "#9461ff",
   accentSoft: "rgba(148,97,255,0.18)",
   cyan: "#22d3ee",
   cyanSoft: "rgba(34,211,238,0.15)",
   green: "#34d399",
+  rose: "#f472b6",
   text: "#e2e8f0",
   muted: "#64748b",
   highlight: "rgba(148,97,255,0.35)",
 };
 
-// ─── Plantillas de meditación ────────────────────────────────────────────────
+// ─── Idiomas disponibles ──────────────────────────────────────────────────────
+type LangKey = "es-ES" | "es-LATAM" | "es-NEUTRO" | "en-US";
+type Gender = "all" | "female" | "male";
+type Tab = "texto" | "voz" | "plantillas";
+type PlayState = "idle" | "playing" | "paused";
+
+const LANGS: Record<LangKey, { label: string; sub: string; flag: string; ttsLang: string; match: (l: string) => boolean }> = {
+  "es-ES":    { label: "Español",  sub: "España",   flag: "🇪🇸", ttsLang: "es", match: l => l === "es-ES" || l === "es_ES" },
+  "es-LATAM": { label: "Español",  sub: "Latino",   flag: "🌎", ttsLang: "es", match: l => l.startsWith("es") && l !== "es-ES" && l !== "es_ES" && !l.startsWith("es-ES") },
+  "es-NEUTRO":{ label: "Español",  sub: "Neutro",   flag: "🌐", ttsLang: "es", match: l => l.startsWith("es") },
+  "en-US":    { label: "English",  sub: "EEUU",     flag: "🇺🇸", ttsLang: "en", match: l => l === "en-US" || l === "en_US" || l.startsWith("en-US") },
+};
+
+function detectGender(v: SpeechSynthesisVoice): "male" | "female" | "unknown" {
+  const n = v.name.toLowerCase();
+  const M = ["male","hombre","masculin","jorge","carlos","pablo","miguel","juan","diego","enrique","antonio","mark","james","david","tom","john","aaron","fred","daniel"];
+  const F = ["female","mujer","femenin","monica","paulina","luciana","elena","carmen","rosa","maria","laura","silvia","valeria","sofia","anna","alice","emma","samantha","karen","victoria","zira","lupe","marisol","paloma"];
+  if (M.some(w => n.includes(w))) return "male";
+  if (F.some(w => n.includes(w))) return "female";
+  return "unknown";
+}
+
+// ─── Plantillas de meditación ─────────────────────────────────────────────────
 const PLANTILLAS = [
   {
     nombre: "Respiración consciente",
@@ -74,7 +96,7 @@ Escuchas el suave murmullo de un arroyo cercano. El agua fluye sin prisa, como t
 
 Los rayos del sol filtran entre las hojas, creando manchas doradas en el suelo.
 
-Caminas descalzo. Sientes la hierba suave bajo tus pies.
+Caminas descalza. Sientes la hierba suave bajo tus pies.
 
 Un pájaro canta a lo lejos. Todo está en perfecto equilibrio.
 
@@ -130,46 +152,47 @@ Duerme en paz. Mañana es un nuevo comienzo. Por ahora, solo descansa.`,
   },
 ];
 
-// ─── Tipos ───────────────────────────────────────────────────────────────────
-type Tab = "texto" | "voz" | "plantillas";
-type PlayState = "idle" | "playing" | "paused";
-
-// ─── Componente principal ─────────────────────────────────────────────────────
+// ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState<Tab>("texto");
   const [texto, setTexto] = useState(PLANTILLAS[0].texto);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [selectedLang, setSelectedLang] = useState<LangKey>("es-ES");
+  const [selectedGender, setSelectedGender] = useState<Gender>("all");
   const [rate, setRate] = useState(0.75);
   const [pitch, setPitch] = useState(0.9);
   const [volume, setVolume] = useState(1.0);
   const [playState, setPlayState] = useState<PlayState>("idle");
-  const [currentCharIndex, setCurrentCharIndex] = useState<number>(-1);
-  const [currentCharLength, setCurrentCharLength] = useState<number>(0);
-  const [voiceFilter, setVoiceFilter] = useState<"es" | "all">("es");
+  const [currentCharIndex, setCurrentCharIndex] = useState(-1);
+  const [currentCharLength, setCurrentCharLength] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadMsg, setDownloadMsg] = useState("");
 
-  const uttRef = useRef<SpeechSynthesisUtterance | null>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
 
-  // Cargar voces
   useEffect(() => {
     synthRef.current = window.speechSynthesis;
-    const cargarVoces = () => {
-      const vs = synthRef.current!.getVoices();
-      if (vs.length > 0) {
-        setVoices(vs);
-        const esVoice = vs.find(v => v.lang.startsWith("es")) || vs[0];
-        setSelectedVoice(esVoice);
-      }
+    const load = () => {
+      const vs = window.speechSynthesis.getVoices();
+      if (vs.length === 0) return;
+      setVoices(vs);
+      const esES = vs.find(v => v.lang === "es-ES" || v.lang === "es_ES");
+      const esAny = vs.find(v => v.lang.startsWith("es"));
+      setSelectedVoice(esES ?? esAny ?? vs[0]);
     };
-    cargarVoces();
-    window.speechSynthesis.onvoiceschanged = cargarVoces;
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
     return () => { synthRef.current?.cancel(); };
   }, []);
 
-  const voicesFiltradas = voiceFilter === "es"
-    ? voices.filter(v => v.lang.startsWith("es"))
-    : voices;
+  // Voces filtradas por idioma y género
+  const filteredVoices = voices.filter(v => {
+    if (!LANGS[selectedLang].match(v.lang)) return false;
+    if (selectedGender === "all") return true;
+    const g = detectGender(v);
+    return g === selectedGender || g === "unknown";
+  });
 
   const detener = useCallback(() => {
     synthRef.current?.cancel();
@@ -181,139 +204,155 @@ export default function App() {
   const reproducir = useCallback(() => {
     if (!synthRef.current || !texto.trim()) return;
     synthRef.current.cancel();
-
     const utt = new SpeechSynthesisUtterance(texto);
     if (selectedVoice) utt.voice = selectedVoice;
     utt.rate = rate;
     utt.pitch = pitch;
     utt.volume = volume;
-    utt.lang = selectedVoice?.lang || "es-ES";
-
+    utt.lang = selectedVoice?.lang ?? "es-ES";
     utt.onstart = () => setPlayState("playing");
     utt.onend = () => { setPlayState("idle"); setCurrentCharIndex(-1); setCurrentCharLength(0); };
     utt.onerror = () => { setPlayState("idle"); setCurrentCharIndex(-1); };
-    utt.onboundary = (e) => {
-      if (e.name === "word") {
-        setCurrentCharIndex(e.charIndex);
-        setCurrentCharLength(e.charLength ?? 0);
-      }
+    utt.onboundary = e => {
+      if (e.name === "word") { setCurrentCharIndex(e.charIndex); setCurrentCharLength(e.charLength ?? 0); }
     };
-
-    uttRef.current = utt;
     synthRef.current.speak(utt);
     setPlayState("playing");
   }, [texto, selectedVoice, rate, pitch, volume]);
 
   const pausarReanudar = useCallback(() => {
     if (!synthRef.current) return;
-    if (playState === "playing") {
-      synthRef.current.pause();
-      setPlayState("paused");
-    } else if (playState === "paused") {
-      synthRef.current.resume();
-      setPlayState("playing");
-    }
+    if (playState === "playing") { synthRef.current.pause(); setPlayState("paused"); }
+    else if (playState === "paused") { synthRef.current.resume(); setPlayState("playing"); }
   }, [playState]);
 
-  const usarPlantilla = (t: typeof PLANTILLAS[0]) => {
-    detener();
-    setTexto(t.texto);
-    setTab("texto");
+  const descargar = useCallback(async () => {
+    if (!texto.trim() || isDownloading) return;
+    setIsDownloading(true);
+    setDownloadMsg("Generando audio...");
+    try {
+      const resp = await fetch("/api/tts-download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: texto,
+          lang: LANGS[selectedLang].ttsLang,
+          slow: rate <= 0.85,
+        }),
+      });
+      if (!resp.ok) {
+        const e = await resp.json();
+        throw new Error(e.error ?? "Error del servidor");
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "meditacion-valeria.mp3";
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+      setDownloadMsg("¡Descargado!");
+      setTimeout(() => setDownloadMsg(""), 3000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error desconocido";
+      setDownloadMsg(`Error: ${msg}`);
+      setTimeout(() => setDownloadMsg(""), 5000);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [texto, selectedLang, rate, isDownloading]);
+
+  const usarPlantilla = (p: typeof PLANTILLAS[0]) => {
+    detener(); setTexto(p.texto); setTab("texto");
   };
 
+  // Cuando cambia el idioma, limpiar voz seleccionada si no coincide
+  useEffect(() => {
+    if (selectedVoice && !LANGS[selectedLang].match(selectedVoice.lang)) {
+      const first = voices.find(v => LANGS[selectedLang].match(v.lang));
+      if (first) setSelectedVoice(first);
+    }
+  }, [selectedLang]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "'Nunito', 'Segoe UI', sans-serif", color: C.text, maxWidth: 480, margin: "0 auto", position: "relative" }}>
+    <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "'Nunito','Segoe UI',sans-serif", color: C.text, maxWidth: 480, margin: "0 auto" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #080b14; }
-        ::-webkit-scrollbar { width: 3px; }
-        ::-webkit-scrollbar-thumb { background: rgba(148,97,255,0.4); border-radius: 2px; }
-        .glass { background: ${C.surface}; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid ${C.border}; }
-        .btn-tap:active { transform: scale(0.95); }
-        .btn-tap { transition: transform 0.12s ease; }
-        input[type=range] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; outline: none; cursor: pointer; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: ${C.accent}; cursor: pointer; }
-        textarea { font-family: inherit; }
-        @keyframes breathe { 0%,100%{transform:scale(1);opacity:0.7} 50%{transform:scale(1.12);opacity:1} }
-        @keyframes glow { 0%,100%{box-shadow:0 0 20px rgba(148,97,255,0.3)} 50%{box-shadow:0 0 40px rgba(148,97,255,0.7)} }
-        @keyframes ripple { 0%{transform:scale(0.8);opacity:1} 100%{transform:scale(2.2);opacity:0} }
-        .word-highlight { background: ${C.highlight}; border-radius: 3px; padding: 0 2px; }
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{background:#080b14;}
+        ::-webkit-scrollbar{width:3px;}
+        ::-webkit-scrollbar-thumb{background:rgba(148,97,255,0.4);border-radius:2px;}
+        .glass{background:${C.surface};backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid ${C.border};}
+        .tap:active{transform:scale(0.95);}
+        .tap{transition:transform 0.12s ease;}
+        input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;outline:none;cursor:pointer;}
+        input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:${C.accent};cursor:pointer;}
+        textarea{font-family:inherit;}
+        @keyframes breathe{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.13);opacity:1}}
+        @keyframes ripple{0%{transform:scale(.8);opacity:1}100%{transform:scale(2.4);opacity:0}}
+        mark.hl{background:${C.highlight};border-radius:3px;padding:0 2px;color:${C.text};}
       `}</style>
 
       {/* Header */}
-      <header className="glass" style={{ flexShrink: 0, zIndex: 40, position: "sticky", top: 0 }}>
-        <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 42, height: 42, borderRadius: 14, background: `linear-gradient(135deg, ${C.accent}, ${C.cyan})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🌿</div>
+      <header className="glass" style={{ flexShrink: 0, position: "sticky", top: 0, zIndex: 40 }}>
+        <div style={{ padding: "13px 18px", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 14, background: `linear-gradient(135deg,${C.accent},${C.cyan})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🌿</div>
           <div>
-            <div style={{ fontWeight: 900, fontSize: 17 }}>Meditación · Voz</div>
-            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Convierte texto en audio de meditación</div>
+            <div style={{ fontWeight: 900, fontSize: 18, letterSpacing: "-0.3px" }}>
+              Meditación <span style={{ color: C.accent }}>ValerIA</span>
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Texto a audio de meditación</div>
           </div>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 20, background: C.cyanSoft, border: `1px solid rgba(34,211,238,0.25)`, fontSize: 11, color: C.cyan, fontWeight: 700 }}>
-            {playState === "playing" ? "▶ Reproduciendo" : playState === "paused" ? "⏸ En pausa" : "✦ Listo"}
+          <div style={{ marginLeft: "auto", padding: "4px 10px", borderRadius: 20, background: C.cyanSoft, border: `1px solid rgba(34,211,238,.25)`, fontSize: 11, color: C.cyan, fontWeight: 700, whiteSpace: "nowrap" }}>
+            {playState === "playing" ? "▶ Reproduciendo" : playState === "paused" ? "⏸ Pausa" : "✦ Listo"}
           </div>
         </div>
       </header>
 
-      {/* Contenido principal */}
-      <main style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+      {/* Main */}
+      <main style={{ flex: 1, overflowY: "auto" }}>
         {tab === "texto" && (
           <VistaTexto
-            texto={texto}
-            setTexto={setTexto}
+            texto={texto} setTexto={setTexto}
             playState={playState}
-            currentCharIndex={currentCharIndex}
-            currentCharLength={currentCharLength}
-            rate={rate}
-            setRate={setRate}
-            pitch={pitch}
-            setPitch={setPitch}
-            volume={volume}
-            setVolume={setVolume}
+            currentCharIndex={currentCharIndex} currentCharLength={currentCharLength}
+            rate={rate} setRate={setRate}
+            pitch={pitch} setPitch={setPitch}
+            volume={volume} setVolume={setVolume}
             selectedVoice={selectedVoice}
-            onPlay={reproducir}
-            onPauseResume={pausarReanudar}
-            onStop={detener}
           />
         )}
         {tab === "voz" && (
           <VistaVoz
-            voices={voicesFiltradas}
-            allVoices={voices}
-            selectedVoice={selectedVoice}
-            setSelectedVoice={setSelectedVoice}
-            voiceFilter={voiceFilter}
-            setVoiceFilter={setVoiceFilter}
+            voices={voices} filteredVoices={filteredVoices}
+            selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice}
+            selectedLang={selectedLang} setSelectedLang={setSelectedLang}
+            selectedGender={selectedGender} setSelectedGender={setSelectedGender}
           />
         )}
-        {tab === "plantillas" && (
-          <VistaPlantillas onUsar={usarPlantilla} />
-        )}
+        {tab === "plantillas" && <VistaPlantillas onUsar={usarPlantilla} />}
       </main>
 
-      {/* Control de reproducción fijo */}
+      {/* Barra de reproducción + descarga */}
       <PlayerBar
         playState={playState}
-        onPlay={reproducir}
-        onPauseResume={pausarReanudar}
-        onStop={detener}
-        selectedVoice={selectedVoice}
-        rate={rate}
+        onPlay={reproducir} onPauseResume={pausarReanudar} onStop={detener}
+        selectedVoice={selectedVoice} rate={rate}
+        onDownload={descargar} isDownloading={isDownloading} downloadMsg={downloadMsg}
       />
 
-      {/* Bottom Nav */}
-      <nav className="glass" style={{ flexShrink: 0, zIndex: 40, position: "sticky", bottom: 0 }}>
+      {/* Nav inferior */}
+      <nav className="glass" style={{ flexShrink: 0, position: "sticky", bottom: 0, zIndex: 40 }}>
         <div style={{ display: "flex" }}>
           {([
             { id: "texto" as Tab, icon: "📝", label: "Texto" },
             { id: "voz" as Tab, icon: "🎙", label: "Voz" },
             { id: "plantillas" as Tab, icon: "🌸", label: "Plantillas" },
-          ]).map((item) => {
+          ]).map(item => {
             const active = tab === item.id;
             return (
               <button key={item.id} onClick={() => setTab(item.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "10px 4px", background: "transparent", border: "none", cursor: "pointer", position: "relative" }}>
-                {active && <span style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 32, height: 3, borderRadius: 2, background: `linear-gradient(90deg, ${C.accent}, ${C.cyan})` }} />}
-                <span style={{ fontSize: 20, lineHeight: 1 }}>{item.icon}</span>
+                {active && <span style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 32, height: 3, borderRadius: 2, background: `linear-gradient(90deg,${C.accent},${C.cyan})` }} />}
+                <span style={{ fontSize: 20 }}>{item.icon}</span>
                 <span style={{ fontSize: 10, fontWeight: 700, color: active ? C.cyan : C.muted }}>{item.label}</span>
               </button>
             );
@@ -324,168 +363,162 @@ export default function App() {
   );
 }
 
-// ─── Vista Texto ─────────────────────────────────────────────────────────────
-function VistaTexto({ texto, setTexto, playState, currentCharIndex, currentCharLength, rate, setRate, pitch, setPitch, volume, setVolume, selectedVoice, onPlay, onPauseResume, onStop }: {
+// ─── Vista Texto ──────────────────────────────────────────────────────────────
+function VistaTexto({ texto, setTexto, playState, currentCharIndex, currentCharLength, rate, setRate, pitch, setPitch, volume, setVolume, selectedVoice }: {
   texto: string; setTexto: (t: string) => void;
   playState: PlayState; currentCharIndex: number; currentCharLength: number;
   rate: number; setRate: (v: number) => void;
   pitch: number; setPitch: (v: number) => void;
   volume: number; setVolume: (v: number) => void;
   selectedVoice: SpeechSynthesisVoice | null;
-  onPlay: () => void; onPauseResume: () => void; onStop: () => void;
 }) {
-  const isPlaying = playState === "playing" || playState === "paused";
+  const isActive = playState !== "idle";
 
-  // Construir texto con palabra resaltada
   const textoResaltado = () => {
-    if (currentCharIndex < 0 || currentCharLength === 0) return <span style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.85, color: C.text }}>{texto}</span>;
-    const antes = texto.slice(0, currentCharIndex);
-    const palabra = texto.slice(currentCharIndex, currentCharIndex + currentCharLength);
-    const despues = texto.slice(currentCharIndex + currentCharLength);
+    if (currentCharIndex < 0 || currentCharLength === 0)
+      return <span style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.85 }}>{texto}</span>;
     return (
-      <span style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.85, color: C.text }}>
-        {antes}<mark className="word-highlight">{palabra}</mark>{despues}
+      <span style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.85 }}>
+        {texto.slice(0, currentCharIndex)}
+        <mark className="hl">{texto.slice(currentCharIndex, currentCharIndex + currentCharLength)}</mark>
+        {texto.slice(currentCharIndex + currentCharLength)}
       </span>
     );
   };
 
   return (
-    <div style={{ padding: "16px 16px 0", display: "flex", flexDirection: "column", gap: 14, paddingBottom: 140 }}>
+    <div style={{ padding: "16px 16px 180px", display: "flex", flexDirection: "column", gap: 14 }}>
 
-      {/* Animación de reproducción */}
+      {/* Animación mientras reproduce */}
       {playState === "playing" && (
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "20px 0 8px", gap: 0 }}>
-          <div style={{ position: "relative", width: 72, height: 72, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: `2px solid ${C.accent}`, animation: "ripple 2s ease-out infinite" }} />
-            <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: `2px solid ${C.cyan}`, animation: "ripple 2s ease-out infinite 0.7s" }} />
-            <div style={{ width: 52, height: 52, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, ${C.cyan})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, animation: "breathe 4s ease-in-out infinite" }}>🌿</div>
+        <div style={{ display: "flex", justifyContent: "center", padding: "14px 0 6px" }}>
+          <div style={{ position: "relative", width: 68, height: 68, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: `2px solid ${C.accent}`, animation: "ripple 2.2s ease-out infinite" }} />
+            <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: `2px solid ${C.cyan}`, animation: "ripple 2.2s ease-out infinite .8s" }} />
+            <div style={{ width: 50, height: 50, borderRadius: "50%", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, animation: "breathe 4s ease-in-out infinite" }}>🌿</div>
           </div>
         </div>
       )}
 
       {/* Área de texto */}
       <div className="glass" style={{ borderRadius: 18, overflow: "hidden" }}>
-        <div style={{ padding: "10px 14px 8px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>TEXTO DE MEDITACIÓN</span>
-          <span style={{ fontSize: 11, color: C.muted }}>{texto.split(/\s+/).filter(Boolean).length} palabras</span>
+        <div style={{ padding: "9px 14px 8px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.muted }}>TEXTO DE MEDITACIÓN</span>
+          <span style={{ fontSize: 11, color: C.muted }}>{texto.trim().split(/\s+/).filter(Boolean).length} palabras</span>
         </div>
-        {isPlaying ? (
-          <div style={{ padding: "14px 16px", minHeight: 200, maxHeight: 320, overflowY: "auto" }}>
+        {isActive ? (
+          <div style={{ padding: "14px 16px", minHeight: 200, maxHeight: 300, overflowY: "auto", color: C.text }}>
             {textoResaltado()}
           </div>
         ) : (
           <textarea
-            value={texto}
-            onChange={e => setTexto(e.target.value)}
-            placeholder="Escribe o pega tu texto de meditación aquí..."
-            style={{ width: "100%", minHeight: 200, maxHeight: 320, background: "transparent", border: "none", outline: "none", padding: "14px 16px", color: C.text, fontSize: 15, lineHeight: 1.85, resize: "none" }}
+            value={texto} onChange={e => setTexto(e.target.value)}
+            placeholder="Escribe o pega tu texto de meditación..."
+            style={{ width: "100%", minHeight: 200, maxHeight: 300, background: "transparent", border: "none", outline: "none", padding: "14px 16px", color: C.text, fontSize: 15, lineHeight: 1.85, resize: "none" }}
           />
         )}
       </div>
 
-      {/* Voz seleccionada (mini) */}
+      {/* Voz activa */}
       <div className="glass" style={{ borderRadius: 14, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 20 }}>🎙</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {selectedVoice?.name || "Sin voz cargada"}
+          <div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {selectedVoice?.name ?? "Sin voz — ve a la pestaña Voz"}
           </div>
-          <div style={{ fontSize: 11, color: C.muted }}>{selectedVoice?.lang || "—"}</div>
+          <div style={{ fontSize: 11, color: C.muted }}>{selectedVoice?.lang ?? "—"}</div>
         </div>
-        <div style={{ fontSize: 11, color: C.cyan, background: C.cyanSoft, padding: "3px 8px", borderRadius: 8, fontWeight: 700, whiteSpace: "nowrap" }}>
-          {(rate * 100).toFixed(0)}% vel
+        <div style={{ fontSize: 11, color: C.cyan, background: C.cyanSoft, padding: "3px 9px", borderRadius: 8, fontWeight: 700 }}>
+          {Math.round(rate * 100)}% vel
         </div>
       </div>
 
-      {/* Controles de ajuste */}
-      <div className="glass" style={{ borderRadius: 16, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ fontWeight: 800, fontSize: 13, color: C.muted }}>AJUSTES DE VOZ</div>
-
-        <SliderControl label="Velocidad" icon="⏩" value={rate} min={0.4} max={1.2} step={0.05}
-          onChange={setRate} color={C.accent}
-          display={rate <= 0.65 ? "Muy lenta" : rate <= 0.85 ? "Lenta (meditación)" : rate <= 1.0 ? "Normal" : "Rápida"}
-          gradient={`linear-gradient(90deg, #9461ff, #22d3ee)`} />
-
-        <SliderControl label="Tono" icon="🎵" value={pitch} min={0.5} max={1.5} step={0.05}
-          onChange={setPitch} color={C.green}
-          display={pitch <= 0.75 ? "Muy grave" : pitch <= 0.95 ? "Grave (sereno)" : pitch <= 1.05 ? "Normal" : "Agudo"}
-          gradient={`linear-gradient(90deg, #34d399, #22d3ee)`} />
-
-        <SliderControl label="Volumen" icon="🔊" value={volume} min={0.1} max={1.0} step={0.05}
-          onChange={setVolume} color="#f472b6"
-          display={volume <= 0.3 ? "Bajo" : volume <= 0.7 ? "Medio" : "Alto"}
-          gradient={`linear-gradient(90deg, #f472b6, #818cf8)`} />
+      {/* Ajustes */}
+      <div className="glass" style={{ borderRadius: 16, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ fontWeight: 800, fontSize: 12, color: C.muted, letterSpacing: "0.5px" }}>AJUSTES DE VOZ</div>
+        <Slider label="Velocidad" icon="⏩" value={rate} min={0.4} max={1.2} step={0.05} onChange={setRate}
+          display={rate <= 0.6 ? "Muy lenta" : rate <= 0.82 ? "Lenta · meditación" : rate <= 1.0 ? "Normal" : "Rápida"}
+          grad={`${C.accent},${C.cyan}`} />
+        <Slider label="Tono" icon="🎵" value={pitch} min={0.5} max={1.5} step={0.05} onChange={setPitch}
+          display={pitch <= 0.72 ? "Muy grave" : pitch <= 0.97 ? "Grave · sereno" : pitch <= 1.08 ? "Normal" : "Agudo"}
+          grad={`${C.green},${C.cyan}`} />
+        <Slider label="Volumen" icon="🔊" value={volume} min={0.1} max={1.0} step={0.05} onChange={setVolume}
+          display={volume <= 0.35 ? "Bajo" : volume <= 0.7 ? "Medio" : "Alto"}
+          grad={`${C.rose},#818cf8`} />
       </div>
     </div>
   );
 }
 
-// ─── Control deslizante ───────────────────────────────────────────────────────
-function SliderControl({ label, icon, value, min, max, step, onChange, display, gradient }: {
+function Slider({ label, icon, value, min, max, step, onChange, display, grad }: {
   label: string; icon: string; value: number; min: number; max: number; step: number;
-  onChange: (v: number) => void; color: string; display: string; gradient: string;
+  onChange: (v: number) => void; display: string; grad: string;
 }) {
   const pct = ((value - min) / (max - min)) * 100;
+  const [c1, c2] = grad.split(",");
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 13, fontWeight: 700, display: "flex", gap: 6, alignItems: "center" }}>
-          <span>{icon}</span> {label}
-        </span>
-        <span style={{ fontSize: 12, color: C.cyan, fontWeight: 700, background: C.cyanSoft, padding: "2px 8px", borderRadius: 6 }}>{display}</span>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{icon} {label}</span>
+        <span style={{ fontSize: 11, color: C.cyan, background: C.cyanSoft, padding: "2px 8px", borderRadius: 6, fontWeight: 700 }}>{display}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
         onChange={e => onChange(parseFloat(e.target.value))}
-        style={{ width: "100%", background: `linear-gradient(90deg, ${gradient.slice(gradient.indexOf("#"))}, transparent ${pct}%, rgba(255,255,255,0.1) ${pct}%)` }} />
+        style={{ background: `linear-gradient(90deg,${c1} ${pct}%,rgba(255,255,255,.1) ${pct}%)` }} />
     </div>
   );
 }
 
 // ─── Barra de reproducción ────────────────────────────────────────────────────
-function PlayerBar({ playState, onPlay, onPauseResume, onStop, selectedVoice, rate }: {
+function PlayerBar({ playState, onPlay, onPauseResume, onStop, selectedVoice, rate, onDownload, isDownloading, downloadMsg }: {
   playState: PlayState; onPlay: () => void; onPauseResume: () => void; onStop: () => void;
   selectedVoice: SpeechSynthesisVoice | null; rate: number;
+  onDownload: () => void; isDownloading: boolean; downloadMsg: string;
 }) {
   const isActive = playState !== "idle";
   return (
-    <div style={{ position: "sticky", bottom: 56, zIndex: 30, padding: "0 16px 10px" }}>
-      <div className="glass" style={{ borderRadius: 20, padding: "14px 18px", background: isActive ? `linear-gradient(135deg, rgba(148,97,255,0.2), rgba(34,211,238,0.12))` : C.surface, border: `1px solid ${isActive ? "rgba(148,97,255,0.4)" : C.border}`, display: "flex", alignItems: "center", gap: 14, boxShadow: isActive ? "0 8px 32px rgba(148,97,255,0.25)" : "none" }}>
+    <div style={{ position: "sticky", bottom: 56, zIndex: 30, padding: "0 14px 8px" }}>
+      {downloadMsg && (
+        <div style={{ marginBottom: 6, padding: "7px 14px", borderRadius: 12, background: downloadMsg.startsWith("Error") ? "rgba(248,113,113,0.15)" : "rgba(52,211,153,0.15)", border: `1px solid ${downloadMsg.startsWith("Error") ? "rgba(248,113,113,0.4)" : "rgba(52,211,153,0.4)"}`, fontSize: 12, color: downloadMsg.startsWith("Error") ? "#f87171" : C.green, fontWeight: 700, textAlign: "center" }}>
+          {downloadMsg}
+        </div>
+      )}
+      <div className="glass" style={{ borderRadius: 20, padding: "13px 16px", background: isActive ? "rgba(148,97,255,0.12)" : C.surface, border: `1px solid ${isActive ? "rgba(148,97,255,0.4)" : C.border}`, display: "flex", alignItems: "center", gap: 12, boxShadow: isActive ? "0 8px 32px rgba(148,97,255,0.25)" : "none" }}>
 
-        {/* Botón principal */}
-        {!isActive ? (
-          <button className="btn-tap" onClick={onPlay} style={{ width: 54, height: 54, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, ${C.cyan})`, border: "none", cursor: "pointer", fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 4px 20px rgba(148,97,255,0.5)` }}>
-            ▶
-          </button>
-        ) : (
-          <button className="btn-tap" onClick={onPauseResume} style={{ width: 54, height: 54, borderRadius: "50%", background: playState === "playing" ? `linear-gradient(135deg, ${C.accent}, ${C.cyan})` : "rgba(255,255,255,0.15)", border: "none", cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 4px 20px rgba(148,97,255,0.4)` }}>
-            {playState === "playing" ? "⏸" : "▶"}
-          </button>
-        )}
+        {/* Play / Pause */}
+        <button className="tap" onClick={isActive ? onPauseResume : onPlay} style={{ width: 52, height: 52, borderRadius: "50%", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, border: "none", cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 4px 20px rgba(148,97,255,.45)`, color: "#fff" }}>
+          {isActive ? (playState === "playing" ? "⏸" : "▶") : "▶"}
+        </button>
 
         {/* Info */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ fontWeight: 800, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {isActive ? (playState === "playing" ? "🎵 Reproduciendo..." : "⏸ En pausa") : "Listo para reproducir"}
           </div>
           <div style={{ fontSize: 11, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {selectedVoice?.name || "Sin voz"} · {(rate * 100).toFixed(0)}% velocidad
+            {selectedVoice?.name ?? "Sin voz"} · {Math.round(rate * 100)}% velocidad
           </div>
         </div>
 
-        {/* Detener */}
-        {isActive && (
-          <button className="btn-tap" onClick={onStop} style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(255,255,255,0.08)", border: `1px solid ${C.border}`, cursor: "pointer", fontSize: 16, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            ■
-          </button>
-        )}
-
-        {/* Indicador de onda */}
+        {/* Ondas (solo cuando reproduce) */}
         {playState === "playing" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
-            {[4, 10, 7, 14, 5, 11, 8].map((h, i) => (
-              <div key={i} style={{ width: 3, height: h, borderRadius: 2, background: C.accent, animation: `breathe ${0.6 + i * 0.1}s ease-in-out infinite alternate` }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+            {[4, 10, 6, 14, 8, 12, 5].map((h, i) => (
+              <div key={i} style={{ width: 3, height: h, borderRadius: 2, background: C.accent, animation: `breathe ${0.55 + i * 0.09}s ease-in-out infinite alternate` }} />
             ))}
           </div>
+        )}
+
+        {/* Descargar MP3 */}
+        <button className="tap" onClick={onDownload} disabled={isDownloading} title="Descargar MP3" style={{ width: 40, height: 40, borderRadius: 12, background: isDownloading ? "rgba(255,255,255,0.04)" : C.accentSoft, border: `1px solid ${isDownloading ? C.border : "rgba(148,97,255,0.45)"}`, cursor: isDownloading ? "not-allowed" : "pointer", fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: isDownloading ? C.muted : C.accent }}>
+          {isDownloading ? "⏳" : "📥"}
+        </button>
+
+        {/* Detener */}
+        {isActive && (
+          <button className="tap" onClick={onStop} style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(255,255,255,0.07)", border: `1px solid ${C.border}`, cursor: "pointer", fontSize: 15, color: C.muted, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            ■
+          </button>
         )}
       </div>
     </div>
@@ -493,104 +526,141 @@ function PlayerBar({ playState, onPlay, onPauseResume, onStop, selectedVoice, ra
 }
 
 // ─── Vista Voz ────────────────────────────────────────────────────────────────
-function VistaVoz({ voices, allVoices, selectedVoice, setSelectedVoice, voiceFilter, setVoiceFilter }: {
-  voices: SpeechSynthesisVoice[]; allVoices: SpeechSynthesisVoice[];
-  selectedVoice: SpeechSynthesisVoice | null;
-  setSelectedVoice: (v: SpeechSynthesisVoice) => void;
-  voiceFilter: "es" | "all"; setVoiceFilter: (f: "es" | "all") => void;
+function VistaVoz({ voices, filteredVoices, selectedVoice, setSelectedVoice, selectedLang, setSelectedLang, selectedGender, setSelectedGender }: {
+  voices: SpeechSynthesisVoice[]; filteredVoices: SpeechSynthesisVoice[];
+  selectedVoice: SpeechSynthesisVoice | null; setSelectedVoice: (v: SpeechSynthesisVoice) => void;
+  selectedLang: LangKey; setSelectedLang: (l: LangKey) => void;
+  selectedGender: Gender; setSelectedGender: (g: Gender) => void;
 }) {
-  const esCount = allVoices.filter(v => v.lang.startsWith("es")).length;
   return (
-    <div style={{ padding: "16px 16px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
+    <div style={{ padding: "16px 16px 180px", display: "flex", flexDirection: "column", gap: 14 }}>
+
+      {/* Idioma */}
       <div className="glass" style={{ borderRadius: 16, padding: "14px 16px" }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>🎙 Selecciona una voz</div>
-        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
-          Las voces disponibles dependen de tu dispositivo Android. Para meditación recomendamos voces femeninas en español.
-        </div>
-      </div>
-
-      {/* Filtro */}
-      <div style={{ display: "flex", gap: 8 }}>
-        {(["es", "all"] as const).map(f => (
-          <button key={f} onClick={() => setVoiceFilter(f)} style={{ flex: 1, padding: "9px 0", borderRadius: 12, background: voiceFilter === f ? C.accentSoft : C.surface, border: `1px solid ${voiceFilter === f ? C.accent : C.border}`, color: voiceFilter === f ? C.accent : C.muted, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-            {f === "es" ? `🇪🇸 Español (${esCount})` : `🌍 Todas (${allVoices.length})`}
-          </button>
-        ))}
-      </div>
-
-      {voices.length === 0 ? (
-        <div className="glass" style={{ borderRadius: 16, padding: "24px", textAlign: "center" }}>
-          <div style={{ fontSize: 36, marginBottom: 10 }}>😔</div>
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Sin voces disponibles</div>
-          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-            Tu navegador no ha cargado voces aún. Intenta abrir Ajustes → Accesibilidad → Texto a voz en tu teléfono y descarga voces en español.
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {voices.map((v, i) => {
-            const selected = selectedVoice?.name === v.name;
-            const esFemenina = /female|femenin|mujer|woman|girl|she/i.test(v.name) || /Google español de Estados Unidos|Monica|Paulina|Luciana|Mónica/i.test(v.name);
+        <div style={{ fontWeight: 800, fontSize: 12, color: C.muted, marginBottom: 10, letterSpacing: "0.5px" }}>IDIOMA</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {(Object.entries(LANGS) as [LangKey, typeof LANGS[LangKey]][]).map(([key, info]) => {
+            const active = selectedLang === key;
             return (
-              <button key={i} className="btn-tap" onClick={() => setSelectedVoice(v)} style={{ textAlign: "left", padding: "12px 14px", borderRadius: 14, background: selected ? C.accentSoft : C.surface, border: `1px solid ${selected ? C.accent : C.border}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, color: C.text }}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: selected ? `linear-gradient(135deg, ${C.accent}, ${C.cyan})` : "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
-                  {esFemenina ? "👩" : "🎙"}
+              <button key={key} onClick={() => setSelectedLang(key)} className="tap" style={{ padding: "10px 10px", borderRadius: 12, background: active ? C.accentSoft : "rgba(255,255,255,0.04)", border: `1px solid ${active ? C.accent : C.border}`, cursor: "pointer", textAlign: "left", display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 20 }}>{info.flag}</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: active ? C.accent : C.text }}>{info.label}</div>
+                  <div style={{ fontSize: 10, color: C.muted }}>{info.sub}</div>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? C.accent : C.text }}>
-                    {v.name}
-                  </div>
-                  <div style={{ fontSize: 11, color: C.muted, display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
-                    <span>{v.lang}</span>
-                    {v.localService && <span style={{ color: C.green, background: "rgba(52,211,153,0.12)", padding: "1px 6px", borderRadius: 4 }}>Local</span>}
-                    {!v.localService && <span style={{ color: C.muted, background: "rgba(255,255,255,0.06)", padding: "1px 6px", borderRadius: 4 }}>Online</span>}
-                  </div>
-                </div>
-                {selected && <span style={{ color: C.cyan, fontSize: 18 }}>✓</span>}
               </button>
             );
           })}
         </div>
-      )}
+      </div>
 
-      <div className="glass" style={{ borderRadius: 14, padding: "12px 14px", borderColor: "rgba(34,211,238,0.25)" }}>
-        <div style={{ fontWeight: 700, fontSize: 13, color: C.cyan, marginBottom: 4 }}>💡 Tip para meditación</div>
-        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>Ajusta la velocidad a 70–80% y el tono a 0.85–0.95 para un sonido más suave y relajante. Las voces locales funcionan sin internet.</p>
+      {/* Género */}
+      <div className="glass" style={{ borderRadius: 16, padding: "14px 16px" }}>
+        <div style={{ fontWeight: 800, fontSize: 12, color: C.muted, marginBottom: 10, letterSpacing: "0.5px" }}>GÉNERO DE VOZ</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {([
+            { id: "female" as Gender, label: "♀ Mujer", color: C.rose },
+            { id: "male" as Gender, label: "♂ Hombre", color: C.cyan },
+            { id: "all" as Gender, label: "≡ Todos", color: C.accent },
+          ]).map(g => {
+            const active = selectedGender === g.id;
+            return (
+              <button key={g.id} onClick={() => setSelectedGender(g.id)} className="tap" style={{ flex: 1, padding: "9px 4px", borderRadius: 12, background: active ? `${g.color}22` : "rgba(255,255,255,0.04)", border: `1px solid ${active ? g.color : C.border}`, cursor: "pointer", fontWeight: 700, fontSize: 13, color: active ? g.color : C.muted }}>
+                {g.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Lista de voces */}
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, letterSpacing: "0.5px" }}>
+          VOCES DISPONIBLES · {filteredVoices.length} {filteredVoices.length === 0 && voices.length > 0 ? "(prueba con «Neutro» o «Todos»)" : ""}
+        </div>
+
+        {voices.length === 0 ? (
+          <div className="glass" style={{ borderRadius: 16, padding: "24px 18px", textAlign: "center" }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>😔</div>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Sin voces cargadas</div>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.7 }}>
+              Abre <strong style={{ color: C.accent }}>Chrome</strong> en tu Redmi 14C. Si sigues sin voces, ve a:<br />
+              Ajustes → Accesibilidad → Texto a voz → Descargar voces en español.
+            </div>
+          </div>
+        ) : filteredVoices.length === 0 ? (
+          <div className="glass" style={{ borderRadius: 14, padding: "16px", textAlign: "center", color: C.muted, fontSize: 13 }}>
+            No hay voces para este filtro. Prueba con <strong style={{ color: C.accent }}>Español Neutro</strong> o género <strong style={{ color: C.accent }}>Todos</strong>.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {filteredVoices.map((v, i) => {
+              const selected = selectedVoice?.name === v.name;
+              const gender = detectGender(v);
+              const gIcon = gender === "female" ? "♀" : gender === "male" ? "♂" : "·";
+              const gColor = gender === "female" ? C.rose : gender === "male" ? C.cyan : C.muted;
+              return (
+                <button key={i} className="tap" onClick={() => setSelectedVoice(v)} style={{ textAlign: "left", padding: "12px 14px", borderRadius: 14, background: selected ? C.accentSoft : "rgba(255,255,255,0.04)", border: `1px solid ${selected ? C.accent : C.border}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, color: C.text }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 10, background: selected ? `linear-gradient(135deg,${C.accent},${C.cyan})` : "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 900, flexShrink: 0, color: selected ? "#fff" : gColor }}>
+                    {gIcon}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? C.accent : C.text }}>{v.name}</div>
+                    <div style={{ fontSize: 11, color: C.muted, display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
+                      <span>{v.lang}</span>
+                      <span style={{ color: v.localService ? C.green : C.muted, background: v.localService ? "rgba(52,211,153,.12)" : "rgba(255,255,255,.06)", padding: "1px 6px", borderRadius: 4 }}>
+                        {v.localService ? "Local" : "Online"}
+                      </span>
+                    </div>
+                  </div>
+                  {selected && <span style={{ color: C.cyan, fontSize: 18, flexShrink: 0 }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="glass" style={{ borderRadius: 14, padding: "12px 14px", borderColor: "rgba(34,211,238,.25)" }}>
+        <div style={{ fontWeight: 700, fontSize: 12, color: C.cyan, marginBottom: 4 }}>💡 Para meditación</div>
+        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.65 }}>
+          Velocidad 70–80%, tono 0.85–0.95. Las voces <strong style={{ color: C.green }}>Local</strong> funcionan sin internet. El botón <strong style={{ color: C.accent }}>📥</strong> descarga el audio en MP3.
+        </p>
       </div>
     </div>
   );
 }
 
 // ─── Vista Plantillas ─────────────────────────────────────────────────────────
-function VistaPlantillas({ onUsar }: { onUsar: (t: typeof PLANTILLAS[0]) => void }) {
-  const [expandida, setExpandida] = useState<number | null>(null);
+function VistaPlantillas({ onUsar }: { onUsar: (p: typeof PLANTILLAS[0]) => void }) {
+  const [abierta, setAbierta] = useState<number | null>(null);
   return (
-    <div style={{ padding: "16px 16px 120px", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ padding: "16px 16px 180px", display: "flex", flexDirection: "column", gap: 12 }}>
       <div className="glass" style={{ borderRadius: 16, padding: "14px 16px" }}>
         <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>🌸 Textos de meditación</div>
-        <div style={{ fontSize: 13, color: C.muted }}>Selecciona una plantilla o personaliza el texto en la pestaña Texto.</div>
+        <div style={{ fontSize: 13, color: C.muted }}>Toca una plantilla para preescucharla y usarla.</div>
       </div>
-
       {PLANTILLAS.map((p, i) => (
-        <div key={i} className="glass" style={{ borderRadius: 18, overflow: "hidden", border: `1px solid ${expandida === i ? p.color + "55" : C.border}` }}>
-          <button onClick={() => setExpandida(expandida === i ? null : i)} style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, color: C.text }}>
+        <div key={i} className="glass" style={{ borderRadius: 18, overflow: "hidden", border: `1px solid ${abierta === i ? p.color + "55" : C.border}` }}>
+          <button onClick={() => setAbierta(abierta === i ? null : i)} style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, color: C.text }}>
             <div style={{ width: 46, height: 46, borderRadius: 13, background: `${p.color}22`, border: `1px solid ${p.color}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>
               {p.icono}
             </div>
             <div style={{ flex: 1, textAlign: "left" }}>
               <div style={{ fontWeight: 800, fontSize: 14 }}>{p.nombre}</div>
-              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{p.texto.split(/\s+/).length} palabras · ~{Math.ceil(p.texto.split(/\s+/).length / 100)} min</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                {p.texto.split(/\s+/).length} palabras · ~{Math.ceil(p.texto.split(/\s+/).length / 90)} min
+              </div>
             </div>
-            <span style={{ color: C.muted, fontSize: 16, transition: "transform 0.2s", transform: expandida === i ? "rotate(180deg)" : "none" }}>▾</span>
+            <span style={{ color: C.muted, fontSize: 16, transition: "transform .2s", transform: abierta === i ? "rotate(180deg)" : "none" }}>▾</span>
           </button>
-
-          {expandida === i && (
+          {abierta === i && (
             <div style={{ borderTop: `1px solid ${C.border}` }}>
-              <div style={{ padding: "12px 16px 8px", maxHeight: 200, overflowY: "auto" }}>
-                <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{p.texto}</p>
+              <div style={{ padding: "12px 16px 8px", maxHeight: 190, overflowY: "auto" }}>
+                <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{p.texto}</p>
               </div>
               <div style={{ padding: "10px 16px 14px" }}>
-                <button className="btn-tap" onClick={() => onUsar(p)} style={{ width: "100%", padding: "11px", borderRadius: 12, background: `linear-gradient(135deg, ${p.color}cc, ${p.color}88)`, border: "none", cursor: "pointer", color: "#fff", fontWeight: 800, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <button className="tap" onClick={() => onUsar(p)} style={{ width: "100%", padding: "11px", borderRadius: 12, background: `linear-gradient(135deg,${p.color}cc,${p.color}88)`, border: "none", cursor: "pointer", color: "#fff", fontWeight: 800, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                   {p.icono} Usar esta plantilla
                 </button>
               </div>
