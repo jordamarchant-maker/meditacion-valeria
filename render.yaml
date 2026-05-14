@@ -1,12 +1,10 @@
 services:
   - type: web
-    name: profe-ia-sofia
-    env: node
-    region: oregon
-    plan: free
+    name: meditacion-valeria
+    env: static
     buildCommand: npm install && npm run build
-    startCommand: npm start
-    envVars:
-      - key: ANTHROPIC_API_KEY
-        sync: false
-    healthCheckPath: /api/health
+    staticPublishPath: ./dist
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: max-age=31536000, immutable
